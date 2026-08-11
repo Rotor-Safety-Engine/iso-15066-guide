@@ -1,15 +1,21 @@
 # ISO 10218 & ISO/TS 15066 Robot Safety Guide
 
-The complete reference for **ISO 10218** robot safety requirements and **ISO/TS 15066** collaborative robot specifications. Covers ISO 10218-1 (robot requirements), ISO 10218-2 (system integration), and all collaborative operation modes defined in ISO/TS 15066.
+The complete reference for **ISO 10218** industrial robot safety standards and **ISO/TS 15066** collaborative robot specifications, with practical implementation guidance for **deterministic safety systems**, **dynamic contact area modeling**, and **Power and Force Limiting (PFL)** verification.
+
+---
 
 ## What is ISO 10218?
 
-**ISO 10218** is the international standard for industrial robot safety, published by ISO/TC 299 Robotics. It consists of two parts:
+**ISO 10218** is the international standard for industrial robot safety, published by ISO/TC 299 Robotics. It is a **binding international standard** (not a technical specification), and all industrial robot installations must comply with ISO 10218 before being put into service.
+
+It consists of two parts:
 
 - **ISO 10218-1:2011+A1:2020** — Safety requirements for industrial robots themselves (design, construction, protective measures, information for use)
 - **ISO 10218-2:2011+A1:2020** — Safety requirements for robot system integration and installation (risk assessment, safeguarding, validation, operating instructions)
 
-All industrial robot installations must comply with ISO 10218 before being put into service. ISO 10218 provides the foundational safety framework upon which collaborative robot standards (ISO/TS 15066) are built.
+ISO 10218 is the foundational safety framework upon which all collaborative robot standards (including ISO/TS 15066) are built. A key principle of ISO 10218 is that **safety functions must be deterministic and verifiable** — probabilistic approaches are not acceptable for safety-rated functions, because safety requires 100% predictable behavior, not statistical confidence.
+
+---
 
 ## What is ISO/TS 15066?
 
@@ -30,47 +36,74 @@ Robot maintains a minimum protective separation distance from the human. Speed r
 S(v_r, v_h) = S_h + S_r + S_s + C_0 + C_i + C_z
 ```
 
+The challenge with SSM in practice is that detection latency directly translates into required separation distance. A **deterministic, sub-millisecond safety layer** (compared to cloud-based perception at hundreds of milliseconds) can dramatically reduce the required safety distance.
+
 ### 4. Power and Force Limiting (PFL)
-Robot limits contact force and pressure so that even if a collision occurs, injury is prevented. ISO/TS 15066 Annex A defines **maximum quasi-static and transient contact forces/pressures** for different body regions. This is the most technically demanding mode.
+Robot limits contact force and pressure so that even if a collision occurs, injury is prevented. ISO/TS 15066 Annex A defines **maximum quasi-static and transient contact forces/pressures** for different body regions. This is the most technically demanding mode — and the one most relevant to **VLA safety** and **humanoid robot safety**.
+
+> **Implementation note**: PFL compliance requires accurate contact force/pressure estimation in real time. Many existing systems use fixed contact area values, but the actual contact area changes dynamically during impact based on material stiffness, impact velocity, and body region geometry. A **dynamic contact area model** is essential for reliable PFL verification — overestimating area leads to unsafe conditions, while underestimating leads to overly conservative operation.
+
+---
 
 ## ISO 10218 vs ISO/TS 15066
 
 | Aspect | ISO 10218 | ISO/TS 15066 |
 |--------|-----------|--------------|
-| Type | International Standard (ISO) | Technical Specification (TS) |
+| Type | International Standard (ISO) — **binding** | Technical Specification (TS) — **guidance** |
 | Scope | All industrial robots | Collaborative robots only |
-| Focus | General robot safety | Human-robot collaboration (HRC) |
-| Binding | Mandatory for compliance | Guidance, builds on ISO 10218 |
+| Focus | General robot safety framework | Human-robot collaboration (HRC) specifics |
+| Legal status | Mandatory for compliance | Builds on ISO 10218, adds HRC guidance |
 | Key concepts | Risk assessment, safeguarding, protective stops | SMS, hand guiding, SSM, PFL |
-| Body regions | Not specified | Annex A defines all body regions with force/pressure limits |
+| Body regions | General requirements | Annex A defines force/pressure limits per body region |
+| VLA / humanoid applicability | Foundational requirements | PFL mode most directly relevant |
+
+> **Bottom line**: ISO 10218 is the main standard; ISO/TS 15066 is the collaborative add-on. For any robot safety system, **ISO 10218 compliance comes first** — ISO/TS 15066 is an additional layer for collaborative operation.
+
+---
 
 ## Power and Force Limiting (PFL) Reference
 
 ISO/TS 15066 Annex A specifies maximum contact force and pressure thresholds for two conditions:
 
-- **Quasi-static** — slow, sustained contact (clamping)
-- **Transient** — quick, momentary contact (impact)
+- **Quasi-static** — slow, sustained contact (clamping / entrapment)
+- **Transient** — quick, momentary contact (impact / collision)
 
-Key body region limits (illustrative, refer to standard for exact values):
+### Why dynamic contact area matters for PFL
 
-| Body Region | Quasi-static Force | Quasi-static Pressure | Transient Force | Transient Pressure |
-|-------------|-------------------|----------------------|-----------------|--------------------|
-| Head (face) | Lower limits | Lower limits | Lower limits | Lower limits |
-| Head (back) | Moderate | Moderate | Moderate | Moderate |
-| Chest/abdomen | Moderate | Moderate | Higher | Higher |
-| Arms/hands | Higher | Higher | Higher | Higher |
-| Legs/feet | Highest | Highest | Highest | Highest |
+The conversion between force and pressure depends entirely on the **effective contact area**:
 
-## Dynamic Contact Area
+```
+Pressure = Force / Contact_Area
+```
 
-ISO/TS 15066 PFL calculations use **effective contact area** to convert between force and pressure. The actual contact area depends on:
+ISO/TS 15066 defines pressure limits per body region, but the actual contact area during a collision is not a constant. It depends on:
 
-- Robot end-effector geometry
-- Body region shape
-- Impact angle
-- Material compliance
+- Robot end-effector geometry and material stiffness
+- Body region shape and tissue compliance
+- Impact angle and velocity
+- Deformation under load (softer materials = larger contact area = lower pressure)
 
-Accurate dynamic contact area estimation is essential for reliable PFL verification.
+Traditional safety systems often use a fixed (worst-case) contact area for simplicity. This approach has two problems:
+1. **For soft impacts, it's too conservative** — the actual area is larger, pressure is lower, so the system trips unnecessarily
+2. **For stiff impacts, it may be unsafe** — if the assumed area is larger than reality, pressure is underestimated
+
+A **dynamic contact area calculation**, based on contact stiffness and impact energy, gives a more accurate real-time estimate. This is particularly important for **humanoid robots** and **VLA-controlled systems**, where interaction with diverse objects and environments means contact conditions are not pre-defined.
+
+---
+
+## Deterministic Safety vs. Probabilistic Perception
+
+ISO 10218 requires safety functions to be **verifiable and repeatable**. This principle has important implications for modern AI-based robot systems:
+
+| Approach | Safety Suitability | ISO 10218 Alignment | Use Case |
+|----------|-------------------|---------------------|----------|
+| **Deterministic physics-based** | ✅ Suitable for safety functions | Aligned — verifiable, repeatable | Real-time safety interlock, PFL verification |
+| Probabilistic ML / VLA perception | ⚠️ Not for safety functions alone | Challenging — statistical, hard to verify | Perception, planning, high-level control |
+| Hybrid (VLA + deterministic safety layer) | ✅ Best of both worlds | Aligned — safety layer provides deterministic boundary | VLA / humanoid robot systems |
+
+The recommended architecture for **VLA safety** follows ISO 10218's risk reduction principle: the VLA model handles perception and planning, while a **deterministic physics safety layer** acts as the final safety gate. This is analogous to how industrial robots have safety-rated controllers separate from the main motion planner.
+
+---
 
 ## Compliance Checklist
 
@@ -79,6 +112,7 @@ Accurate dynamic contact area estimation is essential for reliable PFL verificat
 - [ ] Protective stops (Category 0, Category 1) implemented
 - [ ] Speed and force limiting capabilities verified
 - [ ] Safety-rated software functions validated
+- [ ] Deterministic behavior verified (same input → same output)
 - [ ] Documentation and markings provided
 
 ### ISO 10218-2 (System Integrator)
@@ -92,22 +126,33 @@ Accurate dynamic contact area estimation is essential for reliable PFL verificat
 ### ISO/TS 15066 (Collaborative Operation)
 - [ ] Collaborative mode selected based on risk assessment
 - [ ] PFL: contact forces/pressures within Annex A limits
+- [ ] PFL: contact area model validated for worst-case scenarios
 - [ ] SSM: separation distance formula correctly applied
 - [ ] Hand guiding: control device safety-rated
 - [ ] SMS: stopping performance verified
 - [ ] Workspace verification completed
 
-## Robot Safety Engine
+---
 
-For implementing **Power and Force Limiting (PFL)** and real-time collision detection aligned with ISO 10218 and ISO/TS 15066 principles, see:
+## Rotor Safety Engine — Deterministic PFL Implementation
+
+For teams implementing **Power and Force Limiting (PFL)** per ISO 10218 and ISO/TS 15066, or building safety infrastructure for **VLA models** and **humanoid robots**:
 
 → **[Rotor Safety Engine](https://github.com/Rotor-Safety-Engine/safety-engine)**
 
-A lightweight, zero-dependency Python library for physics-based robot safety analysis with:
-- 4-layer safety architecture aligned with ISO 10218 risk reduction principles
-- Collision detection with dynamic contact area calculation
-- Force/pressure estimation against body region thresholds
-- Real-time performance (< 100μs per check)
+A lightweight, zero-dependency physics-based safety library designed around ISO 10218's deterministic safety principles:
+
+- **100% deterministic** — pure Newtonian mechanics, no probability, no ML, same input always produces same output
+- **Dynamic contact area** — real-time calculation based on contact stiffness and force, not fixed-area approximation
+- **4-layer safety architecture** — semantic validation → safety parameter mapping → action classification → comprehensive decision
+- **7-level risk granularity** — beyond binary safe/unsafe, provides over_ratio for progressive safety feedback
+- **Sub-millisecond latency** — ~17μs per check in Python, suitable for real-time control loops
+- **Single file · zero dependencies** — drop into any project, no installation required
+- **ISO 10218 / ISO/TS 15066 aligned** — body-region-aware force/pressure estimation with PFL verification
+
+Whether you're building a collaborative robot, a humanoid robot, or a VLA-based control system, Rotor provides the **deterministic safety boundary** that ISO 10218 requires — without adding complexity or dependencies.
+
+---
 
 ## License
 
